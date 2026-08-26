@@ -1,0 +1,25 @@
+Package: ExpectedDegreeDepth
+Type: Package
+Title: Expected Degree Depth
+Version: 0.1.0
+Authors@R:
+    person(
+      "Erik", "Mendroš",
+      email = "erikmendros@gmail.com",
+      role = c("aut", "cre")
+    )
+Description:
+    Computes the expected degree depth of multivariate data.
+    The implementation supports arbitrary dimensions and combines
+    R and C++ code for efficient computation.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    Rcpp
+LinkingTo:
+    Rcpp
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
