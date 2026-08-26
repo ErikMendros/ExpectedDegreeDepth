@@ -15,7 +15,7 @@ remotes::install_github("ErikMendros/ExpectedDegreeDepth")
 
 The main function is `ED()`.
 
-It computes the expected degree depth of one or more query points with respect to a given data set.
+It computes the expected degree depth of one or more query points with respect to a given data set. It is assumed that the data set is in general position. When a query point is also part of the data set, it is excluded from the reference data set when computing its depth. Thus, for `ED(data, data)`, the depth of each observation \(X_i\) is computed with respect to the data set excluding \(X_i\).
 
 ### Example
 
@@ -61,6 +61,7 @@ ED(x, data)
 ```
 
 The function returns one expected degree depth value for each query point.
+
 
 ## Dimensions
 
