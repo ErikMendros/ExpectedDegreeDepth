@@ -1,6 +1,6 @@
 # ExpectedDegreeDepth
 
-An R package for computing the Expected Degree Depth (ED) of multivariate data points in any dimension.
+An R package for computing expected degree depth (ED) and k-hull depth (KHD) of multivariate data points in arbitrary dimensions.
 
 ## Installation
 
@@ -13,9 +13,15 @@ remotes::install_github("ErikMendros/ExpectedDegreeDepth")
 
 ## Usage
 
-The main function is `ED()`.
+The package provides two main depth functions:
 
-It computes the expected degree depth of one or more query points with respect to a given data set. It is assumed that the data set is in general position. When a query point is also part of the data set, it is excluded from the reference data set when computing its depth. Thus, for `ED(data, data)`, the depth of each observation \(X_i\) is computed with respect to the data set excluding \(X_i\).
+- ED() computes expected degree depth.
+- KHD() computes k-hull depth.
+
+For d-dimensional data, KHD(x, data, k = d + 1) gives
+the simplicial depth.
+
+It computes the depth of one or more query points with respect to a given data set. It is assumed that the data set is in general position. When a query point is also part of the data set, it is excluded from the reference data set when computing its depth. Thus, for `ED(data, data)` and  `KHD(data, data, k)`, the depth of each observation \(X_i\) is computed with respect to the data set excluding \(X_i\).
 
 ### Example
 
@@ -36,8 +42,14 @@ data <- matrix(
 # Query point
 x <- c(0, 0, 0, 0)
 
-# Compute expected degree depth
+# Expected degree depth
 ED(x, data)
+
+# Simplicial depth
+KHD(x, data, k = d + 1)
+
+# 8-hull depth
+KHD(x, data, k = 8)
 ```
 
 The query point can also be supplied as a matrix:
@@ -46,6 +58,8 @@ The query point can also be supplied as a matrix:
 x <- matrix(c(0, 0, 0, 0), nrow = 1)
 
 ED(x, data)
+KHD(x, data, k = d + 1)
+
 ```
 
 Multiple query points can be evaluated simultaneously:
@@ -58,16 +72,16 @@ x <- matrix(
 )
 
 ED(x, data)
+KHD(x, data, k = d + 1)
+
 ```
 
-The function returns one expected degree depth value for each query point.
+The functions returns one depth value for each query point.
 
 
 ## Dimensions
 
 The implementation supports arbitrary dimensions.
-
-Specialized implementations are used for dimensions 1, 2, and 3, while a general-dimensional implementation is used for dimensions greater than 3.
 
 
 ## Implementation
@@ -91,7 +105,7 @@ ED(x, data)
 
 The package uses:
 
-* Rcpp for the C++ implementation
+* Rcpp and RcppArmadillo for the C++ implementation
 * roxygen2 for documentation
 * testthat for automated testing
 

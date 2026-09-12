@@ -1,7 +1,7 @@
 Package: ExpectedDegreeDepth
 Type: Package
-Title: Expected Degree Depth
-Version: 0.1.0
+Title: Expected Degree and K-Hull Depth
+Version: 0.2.0
 Authors@R:
     person(
       "Erik", "Mendroš",
@@ -9,9 +9,10 @@ Authors@R:
       role = c("aut", "cre")
     )
 Description:
-    Computes the expected degree depth of multivariate data.
-    The implementation supports arbitrary dimensions and combines
-    R and C++ code for efficient computation.
+    Computes expected degree depth and k-hull depth of multivariate data.
+    Simplicial depth is available as the special case of k-hull depth with
+    k equal to d + 1. The implementation supports arbitrary dimensions and
+    combines R and C++ code for efficient computation.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -19,7 +20,9 @@ RoxygenNote: 7.3.2
 Imports:
     Rcpp
 LinkingTo:
-    Rcpp
+    Rcpp,
+    RcppArmadillo
+SystemRequirements: C++14
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

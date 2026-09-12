@@ -9,3 +9,7 @@ ED_all_d_cpp <- function(X, x) {
     .Call(`_ExpectedDegreeDepth_ED_all_d_cpp`, X, x)
 }
 
+KHD_cpp <- function(X, x, k) {
+    .Call(`_ExpectedDegreeDepth_KHD_cpp`, X, x, k)
+}
+
