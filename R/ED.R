@@ -74,43 +74,39 @@ ED_1d <- function(X, x){
 }
 
 
-ED_2d <- function(X, x){
+ED_2d <- function(X, x) {
 
   X <- sweep(X, 2, x)
+  X <- X[X[, 1] != 0, , drop = FALSE]
 
-  X <- X[
-    X[,1] != 0,
-    ,
-    drop = FALSE
-  ]
-
-  cond <- as.numeric(X[,2] > 0)
-
-  ratio <- -X[,1] / X[,2]
-
-  ord <- order(ratio)
-
-  s <- cond[ord]
+  cond <- X[, 2] > 0
+  ratio <- -X[, 1] / X[, 2]
+  s <- cond[order(ratio)]
 
   n <- length(s)
 
-  init <- sum(s)
+  if (n < 3L)
+    stop("At least three observations are required.")
 
-  delta <- ifelse(s == 1, -1, 1)
+  # Precompute counts
+  delta <- (s[-n] == 0) - (s[-1] == 1)
 
-  cts_vec <- c(
-    init,
-    init + cumsum(delta)
-  )
+  ones_vec <- numeric(n)
+  ones_vec[1] <- sum(s[-1])
 
-  cts <- c(
-    1 / (cts_vec / n),
-    1 / (1 - cts_vec / n)
-  )
+  ones_vec[2:n] <- ones_vec[1] + cumsum(delta)
 
-  return(
-    1 / (
-      1 + sum(cts^2) / (2 * n)
+  ell <- ifelse(s == 0, (n - 1) - ones_vec, ones_vec)
+
+  # Use double precision to avoid integer overflow
+  N <- as.double(n)
+
+  # ED: always computed
+  ed <- 1 / (
+    3 + sum(
+      (3*N + 1 - 2*ell) * (ell - 1) * ell /
+        ((N - 1) * N * (N - ell) * (N + 1 - ell))
     )
   )
+  return(ed)
 }
