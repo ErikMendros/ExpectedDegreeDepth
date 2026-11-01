@@ -483,61 +483,54 @@ std::vector<int> check_intersections_cpp(
     const NumericMatrix& Y
 )
 {
-  int d = P.ncol();
-  int kdim = d-2;
-  int n = Y.nrow();
+  // The (d-2)x(d-2) matrix is constant for all remaining points.
+  // Factor it once instead of performing a fresh Gaussian elimination
+  // (and allocating 3+ vectors) for each observation.
+  const int k = P.nrow();
+  const int m = Y.nrow();
+  std::vector<int> result(m, 0);
+  std::vector<double> lu(k*k);
+  std::vector<int> piv(k);
+  for (int i = 0; i < k; ++i)
+    for (int j = 0; j < k; ++j)
+      lu[i*k+j] = P(j,i);
 
-  std::vector<double> A(kdim*kdim);
-
-  for (int i = 0; i < kdim; ++i)
-
-    for (int j = 0; j < kdim; ++j)
-
-      A[i*kdim+j] =
-        P(j,i);
-
-  std::vector<int> result(n,0);
-
-  for (int j = 0; j < n; ++j) {
-
-    std::vector<double> b(kdim);
-
-    for (int i = 0; i < kdim; ++i)
-
-      b[i] =
-        -Y(j,i);
-
-        std::vector<double> t;
-
-        bool ok =
-          solve_linear_system(
-            A,
-            b,
-            kdim,
-            t
-          );
-
-        if (!ok) {
-
-          result[j] = 0;
-          continue;
-        }
-
-        bool inside = true;
-
-        for (int i = 0; i < kdim; ++i) {
-
-          if (t[i] < -1e-10) {
-
-            inside = false;
-            break;
-          }
-        }
-
-        result[j] =
-          inside ? 1 : 0;
+  for (int col = 0; col < k; ++col) {
+    int row = col;
+    double maxabs = std::abs(lu[col*k+col]);
+    for (int i = col+1; i < k; ++i) {
+      const double cur = std::abs(lu[i*k+col]);
+      if (cur > maxabs) { maxabs = cur; row = i; }
+    }
+    if (maxabs < 1e-14) return result;
+    piv[col] = row;
+    if (row != col)
+      for (int j = 0; j < k; ++j)
+        std::swap(lu[col*k+j], lu[row*k+j]);
+    for (int i = col+1; i < k; ++i) {
+      lu[i*k+col] /= lu[col*k+col];
+      const double z = lu[i*k+col];
+      for (int j = col+1; j < k; ++j)
+        lu[i*k+j] -= z*lu[col*k+j];
+    }
   }
-
+  std::vector<double> b(k);
+  for (int p = 0; p < m; ++p) {
+    for (int i = 0; i < k; ++i) b[i] = -Y(p,i);
+    for (int col = 0; col < k; ++col)
+      std::swap(b[col], b[piv[col]]);
+    for (int i = 0; i < k; ++i)
+      for (int j = 0; j < i; ++j)
+        b[i] -= lu[i*k+j] * b[j];
+    bool inside = true;
+    for (int i = k-1; i >= 0; --i) {
+      for (int j = i+1; j < k; ++j)
+        b[i] -= lu[i*k+j] * b[j];
+      b[i] /= lu[i*k+i];
+      if (b[i] < -1e-10) inside = false;
+    }
+    result[p] = inside ? 1 : 0;
+  }
   return result;
 }
 
@@ -831,6 +824,78 @@ inline double inverse_choose_ed(int m, int k) {
 }
 
 // ============================================================
+// Fast three-dimensional ED recursion.
+// This reuses the specialized O(n^2 log n) sweep of the original
+// ED_3d_cpp / trivariate_SDK_cpp rather than the generic HCounts
+// routine, and applies the closed-form ED weights directly.
+// X is already centered, normalized and generically rotated.
+// ============================================================
+static double ed_reciprocal_3d_fast(const NumericMatrix& X) {
+  const int n = X.nrow();
+  if (n <= 3) return n + 1.0;
+
+  struct SweepPoint {
+    double ratio;
+    unsigned char label;
+    unsigned char cross;
+  };
+
+  std::vector<double> u(n), v(n);
+  std::vector<int> side(n);
+  int positive = 0;
+  for (int i = 0; i < n; ++i) {
+    const double z = X(i,2);
+    // A generic rotation makes z != 0 under general position.
+    // An exact zero is handled by the generic routine instead.
+    if (z == 0.0) return -1.0;
+    u[i] = X(i,0) / z;
+    v[i] = X(i,1) / z;
+    side[i] = (z > 0.0) ? 1 : -1;
+    positive += (z > 0.0);
+  }
+  const int negative = n - positive;
+  const double base = (n+1.0)/(positive+1.0)
+    + (n+1.0)/(negative+1.0) - 1.0;
+
+  // The sweep counts every relevant pair twice, as in the
+  // original 3d SDK implementation. Hence the divisor 12,
+  // rather than 6, in the ED correction term.
+  std::vector<double> counts(n-1, 0.0);
+  std::vector<SweepPoint> items(n-1);
+  for (int pivot = 0; pivot < n; ++pivot) {
+    int m = 0;
+    for (int j = 0; j < n; ++j) {
+      if (j == pivot) continue;
+      const double dv = v[j] - v[pivot];
+      items[m].ratio = -(u[j] - u[pivot]) / dv;
+      items[m].label = (dv * side[j] > 0.0);
+      items[m].cross = (side[j] != side[pivot]);
+      ++m;
+    }
+    std::sort(items.begin(), items.end(),
+              [](const SweepPoint& a, const SweepPoint& b) {
+                return a.ratio < b.ratio;
+              });
+    int ell = 0;
+    for (int j = 1; j < m; ++j) ell += items[j].label;
+    counts[ell] += items[0].cross;
+    for (int j = 0; j < m-1; ++j) {
+      if (!items[j].label) ++ell;
+      if (items[j+1].label) --ell;
+      counts[ell] += items[j+1].cross;
+    }
+  }
+
+  double weighted = 0.0;
+  for (int ell = 0; ell <= n-2; ++ell) {
+    if (counts[ell] == 0.0) continue;
+    weighted += counts[ell] *
+      (inverse_choose_ed(n-ell+1, 3) + inverse_choose_ed(ell+3, 3));
+  }
+  return base + (n+1.0)/12.0 * weighted;
+}
+
+// ============================================================
 // Uncorrected reciprocal ED, T_d = sum_{k=0}^n (1 - SD^(k)).
 // The final finite-sample correction is applied by the R wrapper.
 // X is already centered at the query point.
@@ -851,6 +916,13 @@ static double ed_reciprocal_recursive(const NumericMatrix& X) {
     const int nminus = n - nplus;
     return (n+1.0)/(nplus+1.0)
       + (n+1.0)/(nminus+1.0) - 1.0;
+  }
+
+  if (d == 3) {
+    const double fast = ed_reciprocal_3d_fast(X);
+    if (fast >= 0.0) return fast;
+    // A zero on the selected reference axis is a rare degenerate
+    // case; fall back to the general halfspace-count routine.
   }
 
   if (d == 2) {
