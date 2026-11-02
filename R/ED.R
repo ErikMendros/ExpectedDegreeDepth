@@ -1,8 +1,9 @@
 #' Expected Degree Depth
 #'
 #' Computes the expected degree depth of one or more query points with
-#' respect to a multivariate data set, using the recursive finite-sample
-#' identity rather than summing the individual k-hull depths.
+#' respect to a multivariate data set. Uses the original optimized
+#' three-dimensional implementation and the recursive ED identity
+#' in higher dimensions.
 #'
 #' @param x A numeric vector or matrix containing the query point(s).
 #'   If `x` is a matrix, each row represents one query point.
@@ -49,9 +50,21 @@ ED <- function(x, data) {
     }
     n <- nrow(data_i)
 
-    # C++ returns 1/T_d, with T_d = sum_k (1 - SD^(k)).
-    # Apply the finite-sample correction exactly once.
-    uncorrected <- ED_all_d_cpp(data_i, x[i, ])
+    # In general position, k-hull depths vanish for k <= d.
+    if (n <= d) {
+      depth[i] <- 0
+      next
+    }
+
+    # Keep the original optimized 3D routine completely separate.
+    # For d >= 4, use the recursive ED formula. The recursion stops
+    # at d=3 for odd dimensions, and at d=2 for even dimensions.
+    # C++ returns 1 / T_d; the sample correction is applied once here.
+    if (d == 3L) {
+      uncorrected <- ED_3d_cpp(data_i, x[i, ])
+    } else {
+      uncorrected <- ED_all_d_cpp(data_i, x[i, ])
+    }
     depth[i] <- max(0, uncorrected - 1 / (n + 1))
   }
   round(depth, 12)

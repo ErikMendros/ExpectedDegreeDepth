@@ -5,10 +5,194 @@
 
 using namespace Rcpp;
 
+// ------------------------------------------------------------
+// Original specialized 3D implementation. Intentionally kept
+// unchanged; called directly by R and by odd-dimensional recursion.
+// ------------------------------------------------------------
+
+// ============================================================
+// ClosedForm
+// ============================================================
+
+inline double ClosedForm_cpp(double a, double n)
+{
+  return 2.0/(6 + 11*a + 6*a*a + a*a*a)
+  + (2 + 2*a)/(a - n)
+  - 10.0/(n - 1)
+  + 10.0/n
+  + 2*n/(6 + 11*a + 6*a*a + a*a*a)
+  + (a + 2)/(n - 1 - a)
+  + a/(n - a + 1);
+}
+
+
+// ============================================================
+// ED_3d_cpp
+// ============================================================
+
+// [[Rcpp::export]]
+double ED_3d_cpp(NumericMatrix Y, NumericVector x)
+{
+  int N = Y.nrow();
+  int d = Y.ncol();
+
+  // Shift data: X = sweep(Y, 2, x)
+  NumericMatrix X(N, d);
+
+  for (int i = 0; i < N; i++) {
+    for (int j = 0; j < d; j++) {
+      X(i,j) = Y(i,j) - x[j];
+    }
+  }
+
+  // Remove rows where X[,1] == 0
+  std::vector<int> keep;
+  keep.reserve(N);
+
+  for (int i = 0; i < N; i++) {
+    if (X(i,0) != 0)
+      keep.push_back(i);
+  }
+
+  int n = keep.size();
+
+  NumericMatrix X2(n, d);
+
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < d; j++) {
+      X2(i,j) = X(keep[i], j);
+    }
+  }
+
+  // Y <- cbind(X[,1]/X[,3], X[,2]/X[,3], sign(X[,3]))
+  NumericMatrix Yp(n, 3);
+
+  int n1 = 0;
+
+  for (int i = 0; i < n; i++) {
+
+    double z = X2(i,2);
+
+    Yp(i,0) = X2(i,0) / z;
+    Yp(i,1) = X2(i,1) / z;
+    Yp(i,2) = (z > 0 ? 1 : -1);
+
+    if (z > 0)
+      n1++;
+  }
+
+  int n0 = n - n1;
+
+  // Compute ED correction term
+  double ed = n - 3
+  - ((n+1.0)/(n+1.0-n1)
+       - (1 + (double)n1/n
+       + R::choose(n1,2)/R::choose(n,2)
+       + R::choose(n1,3)/R::choose(n,3)))
+       - ((n+1.0)/(n+1.0-n0)
+       - (1 + (double)n0/n
+       + R::choose(n0,2)/R::choose(n,2)
+       + R::choose(n0,3)/R::choose(n,3)));
+
+       // Counts vector
+       std::vector<double> Counts(n-1, 0.0);
+
+       // Main loop
+       for (int idx = 0; idx < n; idx++) {
+
+         std::vector<double> X1, X2v, X3;
+         std::vector<int> CLR, Labels;
+
+         X1.reserve(n-1);
+         X2v.reserve(n-1);
+         X3.reserve(n-1);
+         CLR.reserve(n-1);
+         Labels.reserve(n-1);
+
+         for (int j = 0; j < n; j++) {
+
+           if (j == idx)
+             continue;
+
+           double dx1 = Yp(j,0) - Yp(idx,0);
+           double dx2 = Yp(j,1) - Yp(idx,1);
+           double dx3 = Yp(j,2);
+
+           X1.push_back(dx1);
+           X2v.push_back(dx2);
+           X3.push_back(dx3);
+
+           CLR.push_back(dx3 != Yp(idx,2));
+           Labels.push_back(dx2 * dx3 > 0);
+         }
+
+         int m = n - 1;
+
+         // Precompute ratio to avoid repeated division in sort comparator
+         std::vector<double> ratio(m);
+
+         for (int i = 0; i < m; i++) {
+           ratio[i] = -X1[i] / X2v[i];
+         }
+
+         // Order = order(ratio)
+         std::vector<int> ord(m);
+
+         for (int i = 0; i < m; i++)
+           ord[i] = i;
+
+         std::sort(
+           ord.begin(),
+           ord.end(),
+           [&](int a, int b) {
+             return ratio[a] < ratio[b];
+           }
+         );
+
+         // Apply ordering
+         std::vector<int> Seq(m), Color(m);
+
+         for (int i = 0; i < m; i++) {
+           Seq[i] = Labels[ord[i]];
+           Color[i] = CLR[ord[i]];
+         }
+
+         int EL = 0;
+
+         for (int i = 1; i < m; i++)
+           EL += Seq[i];
+
+         Counts[EL] += Color[0];
+
+         for (int j = 0; j < m-1; j++) {
+
+           if (Seq[j] == 0)
+             EL++;
+
+           if (Seq[j+1] == 1)
+             EL--;
+
+           Counts[EL] += Color[j+1];
+         }
+       }
+
+       // SUM = Σ Counts[l] * ClosedForm(l-1, n)
+       double SUM = 0.0;
+
+       for (int l = 1; l < n; l++) {
+         SUM += Counts[l-1] * ClosedForm_cpp(l-1, n);
+       }
+
+       ed -= 0.25 * SUM;
+
+       return 1.0 / (1 + n - ed);
+}
+
+
 
 // ============================================================
 // Expected degree depth is evaluated using the sample recursion.
-// In particular, we do not aggregate the k-hull depths.
+// For d >= 4, we do not aggregate the k-hull depths.
 // ============================================================
 
 // ============================================================
@@ -824,78 +1008,6 @@ inline double inverse_choose_ed(int m, int k) {
 }
 
 // ============================================================
-// Fast three-dimensional ED recursion.
-// This reuses the specialized O(n^2 log n) sweep of the original
-// ED_3d_cpp / trivariate_SDK_cpp rather than the generic HCounts
-// routine, and applies the closed-form ED weights directly.
-// X is already centered, normalized and generically rotated.
-// ============================================================
-static double ed_reciprocal_3d_fast(const NumericMatrix& X) {
-  const int n = X.nrow();
-  if (n <= 3) return n + 1.0;
-
-  struct SweepPoint {
-    double ratio;
-    unsigned char label;
-    unsigned char cross;
-  };
-
-  std::vector<double> u(n), v(n);
-  std::vector<int> side(n);
-  int positive = 0;
-  for (int i = 0; i < n; ++i) {
-    const double z = X(i,2);
-    // A generic rotation makes z != 0 under general position.
-    // An exact zero is handled by the generic routine instead.
-    if (z == 0.0) return -1.0;
-    u[i] = X(i,0) / z;
-    v[i] = X(i,1) / z;
-    side[i] = (z > 0.0) ? 1 : -1;
-    positive += (z > 0.0);
-  }
-  const int negative = n - positive;
-  const double base = (n+1.0)/(positive+1.0)
-    + (n+1.0)/(negative+1.0) - 1.0;
-
-  // The sweep counts every relevant pair twice, as in the
-  // original 3d SDK implementation. Hence the divisor 12,
-  // rather than 6, in the ED correction term.
-  std::vector<double> counts(n-1, 0.0);
-  std::vector<SweepPoint> items(n-1);
-  for (int pivot = 0; pivot < n; ++pivot) {
-    int m = 0;
-    for (int j = 0; j < n; ++j) {
-      if (j == pivot) continue;
-      const double dv = v[j] - v[pivot];
-      items[m].ratio = -(u[j] - u[pivot]) / dv;
-      items[m].label = (dv * side[j] > 0.0);
-      items[m].cross = (side[j] != side[pivot]);
-      ++m;
-    }
-    std::sort(items.begin(), items.end(),
-              [](const SweepPoint& a, const SweepPoint& b) {
-                return a.ratio < b.ratio;
-              });
-    int ell = 0;
-    for (int j = 1; j < m; ++j) ell += items[j].label;
-    counts[ell] += items[0].cross;
-    for (int j = 0; j < m-1; ++j) {
-      if (!items[j].label) ++ell;
-      if (items[j+1].label) --ell;
-      counts[ell] += items[j+1].cross;
-    }
-  }
-
-  double weighted = 0.0;
-  for (int ell = 0; ell <= n-2; ++ell) {
-    if (counts[ell] == 0.0) continue;
-    weighted += counts[ell] *
-      (inverse_choose_ed(n-ell+1, 3) + inverse_choose_ed(ell+3, 3));
-  }
-  return base + (n+1.0)/12.0 * weighted;
-}
-
-// ============================================================
 // Uncorrected reciprocal ED, T_d = sum_{k=0}^n (1 - SD^(k)).
 // The final finite-sample correction is applied by the R wrapper.
 // X is already centered at the query point.
@@ -919,10 +1031,11 @@ static double ed_reciprocal_recursive(const NumericMatrix& X) {
   }
 
   if (d == 3) {
-    const double fast = ed_reciprocal_3d_fast(X);
-    if (fast >= 0.0) return fast;
-    // A zero on the selected reference axis is a rare degenerate
-    // case; fall back to the general halfspace-count routine.
+    // Stop here in odd dimension: reuse the ORIGINAL specialized 3D
+    // implementation rather than projecting once more to dimension 1.
+    // ED_3d_cpp returns 1/T_3, so invert to obtain T_3.
+    NumericVector origin(3);
+    return 1.0 / ED_3d_cpp(X, origin);
   }
 
   if (d == 2) {
@@ -953,9 +1066,8 @@ static double ed_reciprocal_recursive(const NumericMatrix& X) {
     return total;
   }
 
-  // General dimension: project onto the orthogonal complement
-  // of psi = span(e_{d-1}, e_d), then apply Theorem 3.4's
-  // finite-sample analogue from the manuscript.
+  // For d >= 4, project onto the orthogonal complement of
+  // psi = span(e_{d-1}, e_d), then apply the sample ED recursion.
   NumericMatrix projected(n, d-2);
   for (int i = 0; i < n; ++i)
     for (int a = 0; a < d-2; ++a)
@@ -990,11 +1102,12 @@ double ED_all_d_cpp(NumericMatrix X, NumericVector x) {
   kept.reserve(static_cast<size_t>(nrows)*d);
   for (int i = 0; i < nrows; ++i) {
     bool is_query = true;
-    for (int a = 0; a < d; ++a)
+    for (int a = 0; a < d; ++a) {
       if (X(i,a) != x[a]) { is_query = false; break; }
-      if (is_query) continue;
-      for (int a = 0; a < d; ++a)
-        kept.push_back(X(i,a) - x[a]);
+    }
+    if (is_query) continue;
+    for (int a = 0; a < d; ++a)
+      kept.push_back(X(i,a) - x[a]);
   }
   const int n = static_cast<int>(kept.size()/d);
   NumericMatrix centered(n,d);
@@ -1002,13 +1115,13 @@ double ED_all_d_cpp(NumericMatrix X, NumericVector x) {
     for (int a = 0; a < d; ++a)
       centered(i,a) = kept[i*d+a];
 
-  // A generic orthogonal change of coordinates makes the fixed
+  // For d >= 4, an orthogonal change of coordinates makes the fixed
   // reference planes used in the recursion non-special. In particular,
   // the first coordinate of an observation may be zero without making
   // the projection degenerate. The ED is orthogonally invariant.
   // Normalize rows first: radial scaling of each observation by a
   // positive constant also leaves all hull-containment events intact.
-  if (d >= 3 && n > d) {
+  if (d >= 4 && n > d) {
     for (int i = 0; i < n; ++i) {
       double length = 0.0;
       for (int a = 0; a < d; ++a)
@@ -1035,13 +1148,4 @@ double ED_all_d_cpp(NumericMatrix X, NumericVector x) {
 
   const double T = ed_reciprocal_recursive(centered);
   return 1.0/T;
-}
-
-// Retain the old exported entry point for compatibility. It now
-// delegates to exactly the same recursive algorithm as in d >= 4.
-// [[Rcpp::export]]
-double ED_3d_cpp(NumericMatrix Y, NumericVector x) {
-  if (Y.ncol() != 3)
-    Rcpp::stop("ED_3d_cpp requires a matrix with three columns.");
-  return ED_all_d_cpp(Y,x);
 }

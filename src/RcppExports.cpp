@@ -11,18 +11,6 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// ED_all_d_cpp
-double ED_all_d_cpp(NumericMatrix X, NumericVector x);
-RcppExport SEXP _ExpectedDegreeDepth_ED_all_d_cpp(SEXP XSEXP, SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type X(XSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(ED_all_d_cpp(X, x));
-    return rcpp_result_gen;
-END_RCPP
-}
 // ED_3d_cpp
 double ED_3d_cpp(NumericMatrix Y, NumericVector x);
 RcppExport SEXP _ExpectedDegreeDepth_ED_3d_cpp(SEXP YSEXP, SEXP xSEXP) {
@@ -32,6 +20,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type Y(YSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
     rcpp_result_gen = Rcpp::wrap(ED_3d_cpp(Y, x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// ED_all_d_cpp
+double ED_all_d_cpp(NumericMatrix X, NumericVector x);
+RcppExport SEXP _ExpectedDegreeDepth_ED_all_d_cpp(SEXP XSEXP, SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(ED_all_d_cpp(X, x));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -50,8 +50,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_ExpectedDegreeDepth_ED_all_d_cpp", (DL_FUNC) &_ExpectedDegreeDepth_ED_all_d_cpp, 2},
     {"_ExpectedDegreeDepth_ED_3d_cpp", (DL_FUNC) &_ExpectedDegreeDepth_ED_3d_cpp, 2},
+    {"_ExpectedDegreeDepth_ED_all_d_cpp", (DL_FUNC) &_ExpectedDegreeDepth_ED_all_d_cpp, 2},
     {"_ExpectedDegreeDepth_KHD_cpp", (DL_FUNC) &_ExpectedDegreeDepth_KHD_cpp, 3},
     {NULL, NULL, 0}
 };

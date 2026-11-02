@@ -19,8 +19,9 @@ each query point in \code{x}.
 }
 \description{
 Computes the expected degree depth of one or more query points with
-respect to a multivariate data set, using the recursive finite-sample
-identity rather than summing the individual k-hull depths.
+respect to a multivariate data set. Uses the original optimized
+three-dimensional implementation and the recursive ED identity
+in higher dimensions.
 }
 \examples{
 n <- 100
